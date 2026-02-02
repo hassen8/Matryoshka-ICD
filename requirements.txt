@@ -1,0 +1,13 @@
+accelerate
+datasets
+jedi
+numpy
+pandas
+scikit-learn
+scipy
+tokenizers
+torch
+torchaudio
+torchvision
+tqdm
+transformers
