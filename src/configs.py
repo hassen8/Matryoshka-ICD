@@ -6,6 +6,8 @@ def parse_args():
     
     # Data paths
     parser.add_argument("--data_path", type=str, required=False, help="Path to the CSV dataset")
+    parser.add_argument("--text_column", type=str, default="query", help="Column to be used as text to tokenize")
+    parser.add_argument("--label_column", type=str, default="leaf_doc", help="Column to be used as labels")
     parser.add_argument("--model_name", type=str, default="thomas-sounack/BioClinical-ModernBERT-base")
     
     # Training Hyperparameters
@@ -44,6 +46,7 @@ class ModelConfig:
         self.max_len = args.max_len
         self.checkpoint_dir = args.checkpoint_dir
         self.model_name = args.model_name
+        self.target_column = args.target_column
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         # Mapping hierarchy levels to dimension indices for Step 2

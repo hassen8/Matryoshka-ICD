@@ -7,7 +7,7 @@
 #SBATCH --gpus=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16GB
-#SBATCH --time=02:00:00
+#SBATCH --time=01:00:00
 
 # activate venv
 source /home/hsali/projects/icd/.venv/bin/activate

@@ -30,7 +30,7 @@ def main():
     args = parse_args()
     
     # 2. Setup Device and wandb
-    device = torch.device('cpu') # torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device =  torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     wandb_api_key = os.getenv("WANDB_API_KEY") 
     wandb.login(key=wandb_api_key)
     logger.info(f"Using device: {device}")
@@ -46,8 +46,8 @@ def main():
         tokenizer=tokenizer,
         batch_size=args.batch_size,
         max_len=args.max_len,
-        text_col='query', #To be clarified later on 
-        label_col='leaf_doc'# remind me to silve this problem l8r on
+        text_col=args.text_column, #To be clarified later on 
+        label_col=args.label_column # remind me to silve this problem l8r on
     )
 
     # 4. Initialize Config & Model
