@@ -46,7 +46,6 @@ class ModelConfig:
         self.max_len = args.max_len
         self.checkpoint_dir = args.checkpoint_dir
         self.model_name = args.model_name
-        self.target_column = args.target_column
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         # Mapping hierarchy levels to dimension indices for Step 2

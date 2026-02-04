@@ -70,12 +70,14 @@ def main():
 
     # 6. Run Training
     logger.info("Starting Training...")
-    history = train_model(model, train_loader, val_loader, criterion, optimizer, config)
-    plot_and_save_metrics(history,config)
+    baseline, history = train_model(model, train_loader, val_loader, criterion, optimizer, config)
+    plot_and_save_metrics(history, baseline, config)
     
     #7. Run the testset
     test_metrics['trained_performance'] = evaluate_model(model, test_loader, config)
+    plot_test_metrics(test_metrics, config)
     save_file(test_metrics, 'test_performance')
+
     
 if __name__ == "__main__":
     main()

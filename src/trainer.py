@@ -40,13 +40,6 @@ def evaluate_model(model, val_loader, config):
         all_preds = np.vstack(results_storage[dim]['preds'])
         all_targets = np.vstack(results_storage[dim]['targets'])
 
-        # --- DEBUG STEP: CHECK PROBABILITIES ---
-        if dim == 768: # Just check the largest dim for brevity
-            # print(f"DEBUG: Max Prob: {np.max(all_preds):.4f}")
-            # print(f"DEBUG: Mean Prob: {np.mean(all_preds):.4f}")
-            logger.info(f"DEBUG: Max Prob: {np.max(all_preds):.4f}")
-            logger.info(f"DEBUG: Mean Prob: {np.mean(all_preds):.4f}")
-
         # --- FIX: LOWER THRESHOLD ---
         threshold = 0.3
 
@@ -82,6 +75,13 @@ def evaluate_model(model, val_loader, config):
 
         # print(f"Dim {dim}: Micro-F1 = {micro_f1:.4f} | ROC-AUC = {roc_auc:.4f} | P@5 = {p_at_5:.4f}")
         logger.info(f"Dim {dim}: Micro-F1 = {micro_f1:.4f} | ROC-AUC = {roc_auc:.4f} | P@5 = {p_at_5:.4f}")
+        
+        # --- DEBUG STEP: CHECK PROBABILITIES ---
+        if dim == 768: # Just check the largest dim for brevity
+            # print(f"DEBUG: Max Prob: {np.max(all_preds):.4f}")
+            # print(f"DEBUG: Mean Prob: {np.mean(all_preds):.4f}")
+            logger.info(f"DEBUG: Max Prob: {np.max(all_preds):.4f}")
+            logger.info(f"DEBUG: Mean Prob: {np.mean(all_preds):.4f}")
 
     return metrics
 
@@ -92,17 +92,19 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, config):
     model.to(config.device)
     
     # Filter out non-serializable objects for wandb config
-    wandb_config = {k: v for k, v in vars(config).items() if k not in ['wandb', 'logger', 'device', 'args']}
-    if hasattr(config, 'device'):
-        wandb_config['device'] = str(config.device)
+    saving_config = {k: v for k, v in vars(config).items() if k not in ['wandb', 'logger']}
 
     # Initialize wandb run
     wandb.init(
         project=config.args.wandb_project,
-        config=wandb_config,
+        config= saving_config,
         group="Matryoshka_Query_Based",
         name=f"run_{wandb.util.generate_id()}"
     )
+    # record baseline performance
+    baseline_metrics = evaluate_model(model, val_loader, config)
+    baseline_metrics['epoch'] = 0
+    wandb.log(baseline_metrics)
 
     # 2. Setup Checkpointing
     best_val_auc = 0.0
@@ -165,13 +167,18 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, config):
             logger.info(f"🚀 Performance improved ({best_val_auc:.4f} -> {target_metric:.4f}). Saving model...")
             best_val_auc = target_metric
 
-            # Save the State Dict (Standard for custom models)
+            # Save the State Dict (Standard for custom models) 
+            # Save only the trained layers (filtering out frozen layers)
+            # state_dict = model.state_dict()
+            # trainable_params = [n for n, p in model.named_parameters() if p.requires_grad]
+            # filtered_state_dict = {k: v for k, v in state_dict.items() if k in trainable_params}
+
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'best_f1': best_val_auc,
-                'config': vars(config)
+                'config': saving_config
             }, best_model_path)
 
             # Log model artifact to wandb
@@ -180,4 +187,4 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, config):
             wandb.log_artifact(artifact)
 
     wandb.finish()
-    return history
+    return baseline_metrics, history
