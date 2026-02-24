@@ -6,3 +6,4 @@ torch
 tqdm
 transformers
 wandb
+sentence-transformers

@@ -9,6 +9,7 @@ dependencies = [
     "numpy",
     "pandas",
     "scikit-learn",
+    "sentence-transformers>=3.2.1",
     "torch",
     "tqdm",
     "transformers",
