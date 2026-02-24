@@ -1,4 +1,5 @@
 import torch
+import json
 from src.dataset.preprocess import preprocess_data
 from torch.utils.data import Dataset, DataLoader
 
@@ -51,20 +52,37 @@ class PLM_MultiLabel_Dataset(Dataset):
         }
 
 
+def get_icd_description_map(json_path='/home/hsali/projects/icd/data/icd_descr_map.json'):
+    try:
+        with open(json_path, 'r') as f:
+            data = json.load(f)
+        
+        desc_map = {}
+        for entry in data:
+            hierarchy = entry.get('icd_hierarchy', '')
+            if hierarchy:
+                # Use the last part of hierarchy as the key
+                code = hierarchy.split('|')[-1]
+                # Store full description for better semantics
+                desc_map[code] = entry.get('description', code)
+        return desc_map
+    except Exception as e:
+        print(f"Error loading description map: {e}")
+        return {}
+
+
 class RetrievalDataset(Dataset):
-    def __init__(self, dataframe, icd_descriptions_map, label_col='leaf_doc'):
-        # icd_descriptions_map maps label id (e.g. 2813) to its description string
+    def __init__(self, dataframe, icd_descriptions_map, text_col="query", icd_col='leaf_icd'):
+        # icd_descriptions_map maps leaf_icd to its description string
         self.data = dataframe
         # We will unroll the multi-label into positive pairs (query, description)
         self.pairs = []
         for index, row in dataframe.iterrows():
-            text = str(row['report_text'])
-            labels = row[label_col]
-            for label in labels:
-                # Retrieve the description mapped to the label id.
-                # Assuming the labels list contains the original label IDs from icd_descriptions_map.
-                if label in icd_descriptions_map:
-                    self.pairs.append( (text, icd_descriptions_map[label]) )
+            text = str(row[text_col])
+            icds = row[icd_col]
+            for icd in icds:
+                if icd in icd_descriptions_map:
+                    self.pairs.append( (text, icd_descriptions_map[icd]) )
 
     def __len__(self):
         return len(self.pairs)
@@ -80,29 +98,26 @@ def get_data_loaders(tokenizer=None, batch_size=32, max_len=512, text_col='query
     train_df, validate_df, test_df, label2id, num_labels = preprocess_data()
     
     if model_type == 'retrieval':
-        # the label2id maps from actual ID like '2813' to contiguous id 0...
-        # For retrieval we just need strings, but let's assume `id2label` mapping
-        # provides us a way forward or we load the description map here.
-        # Below we simulate loading icd_descr_map.json or building it from raw strings
-        import json
-        try:
-            with open('./data/icd_descr_map.json', 'r') as f:
-                raw_descr_map = json.load(f) # e.g. {"2813": "description..."}
-        except:
-            # Fallback if the map isn't built yet, use simple string
-            raw_descr_map = {lbl: f"ICD code {lbl}" for lbl in label2id.keys()}
+        # Build description mapping using leaf_icd
+        desc_map = get_icd_description_map('/home/hsali/projects/icd/data/icd_descr_map.json')
         
+        # Build doc2icd mapping to map leaf_doc back to leaf_icd for evaluation ordered_descriptions
+        doc2icd = {}
+        for df in [train_df, validate_df, test_df]:
+            for _, row in df.iterrows():
+                for doc, icd in zip(row.get('leaf_doc', []), row.get('leaf_icd', [])):
+                    doc2icd[doc] = icd
+
         # We need mapping from the contiguous integer ID to description so evaluation indices align
         # or from the raw label to description for training.
-        icd_descriptions_map = {lbl: raw_descr_map.get(str(lbl), f"ICD {lbl}") for lbl in label2id.keys()}
+        icd_descriptions_map = {lbl: desc_map.get(doc2icd.get(lbl, lbl), f"ICD {lbl}") for lbl in label2id.keys()}
         
-        train_ds = RetrievalDataset(dataframe=train_df, icd_descriptions_map=icd_descriptions_map, label_col=label_col)
+        train_ds = RetrievalDataset(dataframe=train_df, icd_descriptions_map=desc_map, text_col=text_col, icd_col='leaf_icd')
         # Validation/Test do not need unrolling for SentenceTransformers evaluation, they need (queries, relevant_docs) dicts
         # We will handle validation in the evaluation logic instead of a DataLoader of InputExamples.
         validate_ds = validate_df
         test_ds = test_df
         
-        from torch.utils.data import DataLoader
         train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=lambda x: x) # collate_fn=list to avoid tensor casting
         
         # We return the list of ALL unique descriptions in order of label2id (index 0 to num_labels-1)

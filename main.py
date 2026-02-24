@@ -10,9 +10,11 @@ from src.data import get_data_loaders
 from src.models import HMPLMICD, StandardAttentionICD
 from src.loss import StandardMRLLoss, HierarchicalMRLLoss
 from src.trainer import train_model, evaluate_model
-from src.utils import plot_and_save_metrics, save_file
+from src.utils import plot_and_save_metrics, save_file, plot_test_metrics
 from ablation_study.models import get_retrieval_model
 from ablation_study.trainer import train_retrieval_model, evaluate_retrieval
+from src.dataset.preprocess import preprocess_data
+
 # Setup Logging
 # Create logs directory if it doesn't exist
 os.makedirs("logs", exist_ok=True)
@@ -43,13 +45,12 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     
     # Determine models to run
-    models_to_run = ['laa', 'standard_attn', 'retrieval'] if config.model_type == 'all' else [config.model_type]
+    models_to_run = ['laa', 'standard_attn', 'retrieval'] if args.model_type == 'all' else   [args.model_type]
     
     for current_model_type in models_to_run:
         logger.info(f"\n{'='*50}\nStarting execution for {current_model_type}\n{'='*50}")
-        config.model_type = current_model_type
 
-        # 1. Fetch data loaders specific to this model type
+        # 1. Fetch data loaders specific to this model type and set up config
         train_loader, val_loader, test_loader, label_data, num_labels = get_data_loaders(
             tokenizer=tokenizer,
             batch_size=args.batch_size,
@@ -58,6 +59,12 @@ def main():
             label_col=args.label_column,
             model_type=current_model_type
         )
+
+        config = ModelConfig(args, num_labels)
+        config.device = device
+        config.wandb = wandb
+        config.logger = logger
+        config.model_type = current_model_type
         
         # 2. Initialize Model
         if config.model_type == 'laa':
@@ -97,7 +104,6 @@ def main():
             label_texts = label_data 
             
             # Re-fetch the actual label2id dict for metric calculation
-            from src.dataset.preprocess import preprocess_data
             _, _, _, actual_label2id, _ = preprocess_data()
             
             # 6. Run Training

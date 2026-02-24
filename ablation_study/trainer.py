@@ -2,34 +2,77 @@ import os
 import torch
 import numpy as np
 from tqdm import tqdm
-from sentence_transformers import losses
+from sentence_transformers import losses, util
 from sklearn.metrics import f1_score, roc_auc_score
 
-def evaluate_retrieval(model, val_dataset, label_texts, config):
+def evaluate_retrieval(model, val_dataset, label_texts, config, label2id):
     model.eval()
     logger = config.logger
+    text_col = config.text_col
 
     logger.info("Starting retrieval evaluation")
 
     # 1. Pre-compute embeddings for all unique labels
     # label_texts is a list of descriptions corresponding to IDs 0...num_labels-1
-    # sentence_transformers.encode automatically handles batching and device
     label_embeddings = model.encode(label_texts, convert_to_tensor=True, show_progress_bar=False) # [num_labels, hidden_size]
 
     # 2. Prepare queries and calculate similarities
-    queries = val_dataset['report_text'].tolist()
+    queries = val_dataset[text_col].tolist()
+    
     # We multi-hot encode targets identically to how it's done for PLM classification
     targets_list = []
-    for labels in val_dataset['leaf_doc']:
-        # labels are integers representing original IDs. We need contiguous ones?
-        # Actually in data.py label_col='leaf_doc' has the original string IDs, we mapped them.
-        # We need to ensure targets match the 0..num_labels-1 indices.
-        # Assuming config has label2id or val_dataset already contains mapped list.
-        # It's better to pass label2id.
-        pass
+    num_labels = len(label2id)
     
-    # The actual matching mechanism:
+    for labels in val_dataset['leaf_doc']:
+        target_vec = np.zeros(num_labels)
+        for lbl in labels:
+            if lbl in label2id:
+                target_vec[label2id[lbl]] = 1.0
+        targets_list.append(target_vec)
+        
+    all_targets = np.vstack(targets_list)
+    
+    # 3. Get query embeddings
+    query_embeddings = model.encode(queries, convert_to_tensor=True, show_progress_bar=False)
+    
     metrics = {}
+    logger.info("\n--- Validation Results (Matryoshka Retrieval) ---")
+    
+    for dim in config.nesting_dims:
+        # Truncate to current Matryoshka dimension
+        q_emb = query_embeddings[:, :dim]
+        l_emb = label_embeddings[:, :dim]
+        
+        # Calculate Cosine Similarity: [num_queries, num_labels]
+        sim_scores = util.cos_sim(q_emb, l_emb).cpu().numpy()
+        
+        # Threshold for binary predictions (0.5 cos_sim corresponds to 60 degrees)
+        threshold = 0.5
+        preds_binary = (sim_scores > threshold).astype(int)
+        micro_f1 = f1_score(all_targets, preds_binary, average='micro')
+
+        try:
+            roc_auc = roc_auc_score(all_targets, sim_scores, average='micro')
+        except ValueError:
+            roc_auc = 0.0
+            
+        # Calculate Precision @ 5
+        k = 5
+        top_k_indices = np.argsort(sim_scores, axis=1)[:, -k:]
+        top_k_targets = np.take_along_axis(all_targets, top_k_indices, axis=1)
+        p_at_5 = np.mean(np.sum(top_k_targets, axis=1) / k)
+
+        metrics[f"val/dim_{dim}_f1"] = micro_f1
+        metrics[f"val/dim_{dim}_auc"] = roc_auc
+        metrics[f"val/dim_{dim}_p@5"] = p_at_5
+
+        logger.info(f"Dim {dim}: Micro-F1 = {micro_f1:.4f} | ROC-AUC = {roc_auc:.4f} | P@5 = {p_at_5:.4f}")
+
+        # --- DEBUG STEP: CHECK SIMILARITIES ---
+        if dim == config.nesting_dims[-1]:
+            logger.info(f"DEBUG: Max Sim: {np.max(sim_scores):.4f}")
+            logger.info(f"DEBUG: Mean Sim: {np.mean(sim_scores):.4f}")
+
     return metrics
 
 def train_retrieval_model(model, train_loader, val_dataset, label_texts, optimizer, config, label2id):
@@ -42,8 +85,8 @@ def train_retrieval_model(model, train_loader, val_dataset, label_texts, optimiz
     wandb.init(
         project=config.args.wandb_project,
         config=saving_config,
-        group="Matryoshka_Retrieval_Ablation",
-        name=f"run_retrieval_{wandb.util.generate_id()}"
+        group="Matryoshka_Query_Based",
+        name=f"{config.model_type}_run_{wandb.util.generate_id()}"
     )
 
     baseline_metrics = evaluate_retrieval(model, val_dataset, label_texts, config, label2id)

@@ -25,7 +25,8 @@ def aggregate_data(df):
         'report_text': 'first',
         'query':'first',
         'split': 'first',
-        'leaf_doc': list  # This creates a list of labels like [2813, 2748, 2805...]
+        'leaf_doc': list,  # This creates a list of labels like [2813, 2748, 2805...]
+        'leaf_icd': list
     }).reset_index()
 
     return df_grouped
@@ -49,7 +50,7 @@ def preprocess_data(mimic_folder='/datasets/MIMIC-CXR/files', file='/datasets/MI
         with open(filepath, 'r') as f:
             report_text = f.read()
         dataset.at[i, 'report_text'] = report_text
-        dataset.at[i, 'icd_leaf'] = icd_leaf
+        dataset.at[i, 'leaf_icd'] = icd_leaf
         dataset.at[i, 'leaf_doc'] = icd_leaf_doc
 
     # clean the report text
@@ -57,7 +58,7 @@ def preprocess_data(mimic_folder='/datasets/MIMIC-CXR/files', file='/datasets/MI
     dataset['query'] = dataset['query'].str.replace('|',', ')
 
     # save leaf icd's
-    labels = list(set(dataset['icd_leaf'].sort_values().tolist()))
+    labels = list(set(dataset['leaf_icd'].sort_values().tolist()))
     docids = list(set(dataset['leaf_doc'].sort_values().tolist()))
 
     with open(f'{output_dir}/ALL_LABELS.txt', 'w') as f:

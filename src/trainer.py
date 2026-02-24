@@ -7,6 +7,7 @@ from sklearn.metrics import f1_score, roc_auc_score
 def evaluate_model(model, val_loader, config):
     model.eval()
     logger = config.logger
+    model_type = config.model_type
 
     # print(f"Starting evaluation")
     logger.info(f"Starting evaluation")
@@ -41,7 +42,7 @@ def evaluate_model(model, val_loader, config):
         all_targets = np.vstack(results_storage[dim]['targets'])
 
         # --- FIX: LOWER THRESHOLD ---
-        threshold = 0.3
+        threshold = 0.5
 
         # Calculate Micro-F1 (Standard for ICD coding)
         # Threshold usually 0.5, or tuned per label
@@ -90,7 +91,8 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, config):
     logger = config.logger
     wandb = config.wandb
     model.to(config.device)
-    
+    model_type = config.model_type
+
     # Filter out non-serializable objects for wandb config
     saving_config = {k: v for k, v in vars(config).items() if k not in ['wandb', 'logger']}
 
@@ -99,7 +101,7 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, config):
         project=config.args.wandb_project,
         config= saving_config,
         group="Matryoshka_Query_Based",
-        name=f"run_{wandb.util.generate_id()}"
+        name=f"{model_type}_run_{wandb.util.generate_id()}"
     )
     # record baseline performance
     baseline_metrics = evaluate_model(model, val_loader, config)

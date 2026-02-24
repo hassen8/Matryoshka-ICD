@@ -37,6 +37,7 @@ class ModelConfig:
     def __init__(self, args, num_labels):
         self.args = args
         self.num_labels = num_labels
+        self.text_col = args.text_column
         self.hidden_size = args.hidden_size
         self.nesting_dims = sorted(args.nesting_dims)
         self.hierarchical_mode = args.hierarchical_mode
