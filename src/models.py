@@ -138,3 +138,55 @@ class HMPLMICD(nn.Module):
         logits_dict = self.classifier(doc_reps)
 
         return logits_dict
+
+class StandardAttentionICD(nn.Module):
+    def __init__(self, config, pretrained_model_name='microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract'):
+        super().__init__()
+        self.config = config
+
+        # Load Pretrained Backbone
+        self.bert = AutoModel.from_pretrained(pretrained_model_name)
+        if config.freeze_backbone:
+            print(f"Freezing backbone: {pretrained_model_name}")
+            for param in self.bert.parameters():
+                param.requires_grad = False
+
+        # Drop Label-Aware Attention; use standard projection
+        # This acts as the replacement for the LAA classifier logic, simply replicating 
+        # the projection over all labels from a mean-pooled sentence representation.
+        self.num_labels = config.num_labels
+        self.nesting_dims = config.nesting_dims
+        self.hidden_size = config.hidden_size
+        
+        # In PLM-ICD with LAA, each label gets a unique attention vector, and a shared linear(hidden->1)
+        # projects it. For standard pooling, we have *one* document vector, and project it to *num_labels*.
+        # To support Matryoshka naturally, we do a Linear(hidden -> num_labels).
+        self.classifier = nn.Linear(self.hidden_size, self.num_labels)
+
+    def forward(self, input_ids, attention_mask):
+        outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask)
+        last_hidden_state = outputs.last_hidden_state # [batch, seq_len, hidden]
+
+        # Mean Pooling
+        mask = attention_mask.unsqueeze(-1).expand(last_hidden_state.size()).float()
+        embeddings = torch.sum(last_hidden_state * mask, 1) / torch.clamp(mask.sum(1), min=1e-9)
+        # embeddings: [batch, hidden]
+
+        logits_dict = {}
+
+        for dim in self.nesting_dims:
+            # Slice representation
+            sliced_rep = embeddings[:, :dim] # [batch, dim]
+
+            # Slice weights (Weight Tying)
+            # Full weight: [num_labels, hidden_size] -> Sliced: [num_labels, dim]
+            sliced_weight = self.classifier.weight[:, :dim]
+            sliced_bias = self.classifier.bias
+
+            # Project
+            # [batch, dim] @ [dim, num_labels] + bias -> [batch, num_labels]
+            logits = F.linear(sliced_rep, sliced_weight, sliced_bias)
+
+            logits_dict[dim] = logits # [batch, num_labels]
+
+        return logits_dict

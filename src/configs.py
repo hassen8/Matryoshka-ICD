@@ -9,6 +9,8 @@ def parse_args():
     parser.add_argument("--text_column", type=str, default="query", help="Column to be used as text to tokenize")
     parser.add_argument("--label_column", type=str, default="leaf_doc", help="Column to be used as labels")
     parser.add_argument("--model_name", type=str, default="thomas-sounack/BioClinical-ModernBERT-base")
+    parser.add_argument("--model_type", type=str, default="laa", choices=['laa', 'standard_attn', 'retrieval', 'all'])
+    parser.add_argument("--use_projection", type=bool, default=True, help="Whether to include a projection layer for retrieval model")
     
     # Training Hyperparameters
     parser.add_argument("--batch_size", type=int, default=32)
@@ -41,6 +43,13 @@ class ModelConfig:
         self.dropout_prob = args.dropout_prob
         self.batch_size = args.batch_size
         self.freeze_backbone = args.freeze_backbone
+        
+        self.model_type = args.model_type
+        self.use_projection = getattr(args, 'use_projection', True)
+        if self.freeze_backbone:
+            # If backbone is frozen, we must have a projection layer to train.
+            self.use_projection = True
+
         self.lr = args.lr
         self.epochs = args.epochs
         self.max_len = args.max_len

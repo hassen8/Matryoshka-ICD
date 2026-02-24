@@ -90,6 +90,23 @@ This forces the model to pack the most critical information into the earliest di
     - `dataset/preprocess.py`: Raw text cleaning and label mapping.
 - `logs/`: Stores metric plots (F1, AUC curves).
 - `checkpoints/`: Stores model weights (`best_model.pt`).
+- `ablation_study/`: Dedicated module for Retrieval-Based Matryoshka ablation, integrating `sentence_transformers`.
 
-## 6. Conclusion
-By combining Label-Aware Attention (standard for ICD tasks) with Matryoshka Representation Learning, it produces a model that is both accurate and computationally flexible. The resulting embeddings can be truncated to 64 or 128 dimensions for efficient storage or retrieval while maintaining high classification performance.
+## 6. Ablation Studies
+
+To isolate the contributions of LAA and the MRL-classification setup, two ablation studies are provided:
+
+### 6.1. Study A: Standard Attention (`model_type=standard_attn`)
+This study compares LAA against a simpler baseline.
+- **Architecture**: `Backbone -> Mean Pooling -> Matryoshka Linear Classifier`.
+- **Implementation**: Instead of building attention maps for each label, the backbone outputs are mean-pooled down to a single document representation. A linear projection then maps this vector simultaneously across all dimensions to the label space.
+
+### 6.2. Study B: Retrieval-Based Matryoshka (`model_type=retrieval`)
+This study compares the multi-label classification paradigm against a Bi-Encoder Dense Retrieval framework.
+- **Framework**: Built on `sentence_transformers`.
+- **Training Paradigm**: Multi-label records are exploded into `(Clinical Text, ICD Description)` positive pairs. The model minimizes `MultipleNegativesRankingLoss` wrapped inside `MatryoshkaLoss`.
+- **Projection Layer**: An optional linear probe (`--use_projection`) can be enabled (and is strictly enforced when the backbone is frozen) to align the generalized text embeddings to the clinical hierarchy.
+- **Evaluation**: Performs dynamic vector search (cosine similarity constraint) to evaluate Micro-F1, ROC-AUC, and P@5 locally per Matryoshka dimension.
+
+## 7. Conclusion
+By combining Label-Aware Attention (standard for ICD tasks) with Matryoshka Representation Learning, it produces a model that is both accurate and computationally flexible. The resulting embeddings can be truncated to 64 or 128 dimensions for efficient storage or retrieval while maintaining high classification performance. The provided ablation modes further facilitate isolating the effects of the attention mechanism and the learning paradigm.

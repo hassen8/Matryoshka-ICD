@@ -24,18 +24,25 @@ def plot_and_save_metrics(history_list, baseline_metrics, config, save_folder=".
 
     # Create the directory if it doesn't exist
     os.makedirs(save_folder, exist_ok=True)
+    plots_folder = os.path.join(save_folder, "plots")
+    os.makedirs(plots_folder, exist_ok=True)
+
+
+    #model type
+    model_type = config.model_type
 
     plt.figure(figsize=(15, 8))
     # Plot F1 Scores
     for dim in config.nesting_dims:
         plt.plot(history_df['epoch'], history_df[f'val/dim_{dim}_f1'], label=f'F1 Dim {dim}')
 
-    plt.title('Validation Micro-F1 Score per Epoch for each Matryoshka Dimension')
+    plt.xticks(np.arange(min(history_df['epoch']), max(history_df['epoch'])+1, 1.0))
+    plt.title(f'{model_type}: Validation Micro-F1 Score per Epoch for each Matryoshka Dimension')
     plt.xlabel('Epoch')
     plt.ylabel('Micro-F1 Score')
     plt.legend()
     plt.grid(True)
-    plt.savefig(os.path.join(save_folder, 'f1_scores.png'))
+    plt.savefig(f'{plots_folder}/{model_type}_f1_scores.png')
     plt.close() # Close the figure to free up memory
 
     plt.figure(figsize=(15, 8))
@@ -44,12 +51,12 @@ def plot_and_save_metrics(history_list, baseline_metrics, config, save_folder=".
         plt.plot(history_df['epoch'], history_df[f'val/dim_{dim}_auc'], label=f'AUC Dim {dim}')
     # set x-axis labels to be integers
     plt.xticks(np.arange(min(history_df['epoch']), max(history_df['epoch'])+1, 1.0))
-    plt.title('Validation ROC-AUC Score per Epoch for each Matryoshka Dimension')
+    plt.title(f'{model_type}: Validation ROC-AUC Score per Epoch for each Matryoshka Dimension')
     plt.xlabel('Epoch')
     plt.ylabel('ROC-AUC Score')
     plt.legend()
     plt.grid(True)
-    plt.savefig(os.path.join(save_folder, 'auc_scores.png'))
+    plt.savefig(f'{plots_folder}/{model_type}_auc_scores.png')
     plt.close()
 
     plt.figure(figsize=(15, 8))
@@ -57,17 +64,18 @@ def plot_and_save_metrics(history_list, baseline_metrics, config, save_folder=".
     for dim in config.nesting_dims:
         plt.plot(history_df['epoch'], history_df[f'val/dim_{dim}_p@5'], label=f'P@5 Dim {dim}')
 
-    plt.title('Validation Precision@5 Score per Epoch for each Matryoshka Dimension')
+    plt.xticks(np.arange(min(history_df['epoch']), max(history_df['epoch'])+1, 1.0))
+    plt.title(f'{model_type}: Validation Precision@5 Score per Epoch for each Matryoshka Dimension')
     plt.xlabel('Epoch')
     plt.ylabel('Precision@5 Score')
     plt.legend()
     plt.grid(True)
-    plt.savefig(os.path.join(save_folder, 'p@5_scores.png'))
+    plt.savefig(f'{plots_folder}/{model_type}_p@5_scores.png')
     plt.close()
 
-    print(f"Plots saved to folder: {save_folder}")
+    print(f"Plots saved to folder: {plots_folder}")
     
-    save_file(history_list, 'training_history')    
+    save_file(history_list, f'{save_folder}/{model_type}_training_history')    
 
 def convert_numpy_floats(item):
     if isinstance(item, (np.float32, np.float64)):
@@ -101,6 +109,7 @@ def plot_test_metrics(test_metrics, config, save_folder="./logs"):
     Comparing the Test Metrics for the baseline and the trained model.
     Generates a single figure with grouped bar charts for F1, AUC, and P@5.
     """
+    model_type = config.model_type
     baseline = test_metrics.get('baseline_performance', {})
     trained = test_metrics.get('trained_performance', {})
     
@@ -166,7 +175,10 @@ def plot_test_metrics(test_metrics, config, save_folder="./logs"):
         autolabel(rects2)
         
     fig.tight_layout()
-    save_path = os.path.join(save_folder, "test_comparison_all_metrics.png")
+    save_file(test_metrics, f'{save_folder}/{config.model_type}_test_performance')
+    plots_folder = os.path.join(save_folder, "plots")
+    os.makedirs(plots_folder, exist_ok=True)
+    save_path = f"{plots_folder}/{config.model_type}_test_comparison_all_metrics.png"
     plt.savefig(save_path)
     plt.close()
         

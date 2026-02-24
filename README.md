@@ -8,6 +8,7 @@
 - **Label-Aware Attention**: Computes specific attention weights for each label to capture relevant clinical evidence from long documents.
 - **Flexible Inference**: Evaluate using 64, 128, 256, or 768 dimensions depending on your computational budget.
 - **BioClinical-ModernBERT Backbone**: Leverages state-of-the-art medical language models.
+- **Ablation Ready**: Seamlessly toggle between Label-Aware Attention, Standard Attention, and Dense Retrieval Bi-Encoder models via command-line tags.
 
 ## Installation
 
@@ -46,10 +47,33 @@ To train the model, use `main.py`. You can configure hyperparameters via command
 ```bash
 python main.py \
     --model_name "thomas-sounack/BioClinical-ModernBERT-base" \
+    --model_type "laa" \
     --batch_size 32 \
     --epochs 20 \
     --text_column "query" \
     --label_column "leaf_doc"
+```
+
+### Running Ablation Studies
+
+You can run comparison models by changing the `--model_type` argument:
+
+**Study A (Standard Attention)**:
+```bash
+python main.py --model_type standard_attn --epochs 20
+```
+
+**Study B (Retrieval-Based Bi-Encoder)**:
+```bash
+python main.py --model_type retrieval --freeze_backbone True --use_projection True --epochs 20
+```
+
+### Running All Models
+
+To run all available models, use the `--model_type all` argument:
+
+```bash
+python main.py --model_type all --epochs 20
 ```
 
 ### Key Arguments
@@ -58,9 +82,11 @@ python main.py \
 | :--- | :--- | :--- |
 | `--data_path` | `None` | Path to the CSV dataset (optional if using internal processing). |
 | `--model_name` | `thomas-sounack/BioClinical-ModernBERT-base` | HuggingFace model backbone. |
+| `--model_type` | `laa` | Which model architecture to run: `laa`, `standard_attn`, or `retrieval`. |
 | `--text_column` | `query` | Column name in the dataframe containing the input text. |
 | `--label_column` | `leaf_doc` | Column name containing the list of target labels. |
 | `--nesting_dims` | `[64, 128, 256, 768]` | Dimensions for Matryoshka learning. |
+| `--use_projection` | `True` | Used only for `retrieval` models. Forces a dense projection layer. |
 | `--wandb_project` | `Matriyoshka` | Name of the W&B project for logging. |
 
 ## Project Structure
@@ -72,11 +98,14 @@ python main.py \
 ├── main.py               # Entry point for training and evaluation
 ├── project_report.md     # Detailed technical report
 ├── requirements.txt      # Python dependencies
+├── ablation_study/       # Retrieval-Based Matryoshka models and trainers
+│   ├── models.py
+│   └── trainer.py
 └── src/
     ├── configs.py        # Configuration and argument parsing
-    ├── data.py           # PyTorch Dataset and DataLoader
+    ├── data.py           # PyTorch Dataset and DataLoader (Retrieval + Classification)
     ├── loss.py           # MRL Loss implementation
-    ├── models.py         # Model architecture (Backbone + LAA + MRL Head)
+    ├── models.py         # Model architecture (Backbone + LAA/Standard + MRL Head)
     ├── trainer.py        # Training loop and evaluation metrics
     ├── utils.py          # Utility functions
     └── dataset/
