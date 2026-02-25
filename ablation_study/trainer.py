@@ -101,9 +101,9 @@ def train_retrieval_model(model, train_loader, val_dataset, label_texts, optimiz
         matryoshka_dims=config.nesting_dims
     )
 
-    save_dir = config.checkpoint_dir
+    save_dir = config.checkpoint_dir+"/matryoshka_retrieval_model"
     os.makedirs(save_dir, exist_ok=True)
-    best_model_path = os.path.join(save_dir, "best_retrieval_model.pt")
+    best_model_path = save_dir
 
     history = []
     best_val_auc = 0.0
@@ -123,8 +123,12 @@ def train_retrieval_model(model, train_loader, val_dataset, label_texts, optimiz
             
             # batch is a list of InputExample
             # sentence_transformers loss functions expect inputs as a list of dictionaries containing tokenized data
-            features = model.tokenize([example.texts for example in batch])
-            
+            num_texts = len(batch[0].texts)
+            features = []
+            for idx in range(num_texts):
+                texts = [example.texts[idx] for example in batch]
+                features.append(model.tokenize(texts))
+                
             # features is a list of dictionaries [query_features, positive_features]
             # device transfer
             for f in features:

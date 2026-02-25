@@ -185,7 +185,7 @@ def plot_test_metrics(test_metrics, config, save_folder="./logs"):
     print(f"Test comparison plot saved to {save_path}")
 
 
-def load_model(checkpoint_path, device=None):
+def load_hmplm_model(checkpoint_path, device=None):
     """
     Only use thus function after ensuring you are saving only the trained layers, not the whole model with the frozen backbone.
     Loads a saved model checkpoint, handling the initialization of frozen layers correctly.
@@ -223,3 +223,21 @@ def load_model(checkpoint_path, device=None):
     model.eval()
     
     return model, checkpoint.get('epoch'), checkpoint.get('best_f1')
+
+
+def load_retrieval_model(checkpoint_path, device=None):
+    """
+    Loads a saved SentenceTransformer retrieval model.
+    """
+    import torch
+    from sentence_transformers import SentenceTransformer
+    
+    if device is None:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
+    print(f"Loading retrieval model from {checkpoint_path}")
+    model = SentenceTransformer(checkpoint_path)
+    model.to(device)
+    model.eval()
+    
+    return model

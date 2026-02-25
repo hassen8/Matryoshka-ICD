@@ -110,9 +110,9 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, config):
 
     # 2. Setup Checkpointing
     best_val_auc = 0.0
-    save_dir = config.checkpoint_dir
+    save_dir = config.checkpoint_dir + "/matryoshka_plm_model"
     os.makedirs(save_dir, exist_ok=True)
-    best_model_path = os.path.join(save_dir, "best_model.pt")
+    best_model_path = os.path.join(save_dir, "best_hmplm_model.pt")
 
     history = [] # To store metrics per epoch
 
