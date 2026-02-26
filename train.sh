@@ -16,4 +16,4 @@ source /home/hsali/projects/icd/.venv/bin/activate
 source .env
 
 # run Python script
-uv run main.py --model_type all --epochs 20
+uv run main.py --model_type standard_attn --epochs 20

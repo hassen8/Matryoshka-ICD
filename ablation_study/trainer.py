@@ -46,10 +46,19 @@ def evaluate_retrieval(model, val_dataset, label_texts, config, label2id):
         # Calculate Cosine Similarity: [num_queries, num_labels]
         sim_scores = util.cos_sim(q_emb, l_emb).cpu().numpy()
         
-        # Threshold for binary predictions (0.5 cos_sim corresponds to 60 degrees)
-        threshold = 0.5
-        preds_binary = (sim_scores > threshold).astype(int)
-        micro_f1 = f1_score(all_targets, preds_binary, average='micro')
+        # --- REAL-WORLD THRESHOLD TUNING ---
+        best_threshold = 0.5
+        best_f1 = 0.0
+
+        # Sweep thresholds from 0.01 to 0.99 for cosine similarities
+        for t in np.arange(0.01, 1.00, 0.01):
+            preds_binary_t = (sim_scores > t).astype(int)
+            f1_t = f1_score(all_targets, preds_binary_t, average='micro')
+            if f1_t > best_f1:
+                best_f1 = f1_t
+                best_threshold = t
+
+        micro_f1 = best_f1
 
         try:
             roc_auc = roc_auc_score(all_targets, sim_scores, average='micro')
@@ -66,7 +75,7 @@ def evaluate_retrieval(model, val_dataset, label_texts, config, label2id):
         metrics[f"val/dim_{dim}_auc"] = roc_auc
         metrics[f"val/dim_{dim}_p@5"] = p_at_5
 
-        logger.info(f"Dim {dim}: Micro-F1 = {micro_f1:.4f} | ROC-AUC = {roc_auc:.4f} | P@5 = {p_at_5:.4f}")
+        logger.info(f"Dim {dim}: Micro-F1 = {micro_f1:.4f} (Thresh: {best_threshold:.2f}) | ROC-AUC = {roc_auc:.4f} | P@5 = {p_at_5:.4f}")
 
         # --- DEBUG STEP: CHECK SIMILARITIES ---
         if dim == config.nesting_dims[-1]:

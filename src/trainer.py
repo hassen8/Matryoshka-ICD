@@ -41,13 +41,21 @@ def evaluate_model(model, val_loader, config):
         all_preds = np.vstack(results_storage[dim]['preds'])
         all_targets = np.vstack(results_storage[dim]['targets'])
 
-        # --- FIX: LOWER THRESHOLD ---
-        threshold = 0.5
+        # --- REAL-WORLD THRESHOLD TUNING ---
+        # Highly imbalanced datasets push probabilities low. 0.5 is a bad assumption.
+        # We sweep thresholds to find the optimal global threshold for Micro-F1.
+        best_threshold = 0.5
+        best_f1 = 0.0
 
-        # Calculate Micro-F1 (Standard for ICD coding)
-        # Threshold usually 0.5, or tuned per label
-        preds_binary = (all_preds > threshold).astype(int)
-        micro_f1 = f1_score(all_targets, preds_binary, average='micro')
+        # Sweep thresholds from 0.01 to 0.50 in steps of 0.01
+        for t in np.arange(0.01, 0.51, 0.01):
+            preds_binary_t = (all_preds > t).astype(int)
+            f1_t = f1_score(all_targets, preds_binary_t, average='micro')
+            if f1_t > best_f1:
+                best_f1 = f1_t
+                best_threshold = t
+
+        micro_f1 = best_f1
 
         # Calculate ROC-AUC (weighted or micro)
         try:
@@ -74,8 +82,8 @@ def evaluate_model(model, val_loader, config):
         metrics[f"val/dim_{dim}_auc"] = roc_auc
         metrics[f"val/dim_{dim}_p@5"] = p_at_5
 
-        # print(f"Dim {dim}: Micro-F1 = {micro_f1:.4f} | ROC-AUC = {roc_auc:.4f} | P@5 = {p_at_5:.4f}")
-        logger.info(f"Dim {dim}: Micro-F1 = {micro_f1:.4f} | ROC-AUC = {roc_auc:.4f} | P@5 = {p_at_5:.4f}")
+        # print(f"Dim {dim}: Micro-F1 = {micro_f1:.4f} (Thresh: {best_threshold:.2f}) | ROC-AUC = {roc_auc:.4f} | P@5 = {p_at_5:.4f}")
+        logger.info(f"Dim {dim}: Micro-F1 = {micro_f1:.4f} (Thresh: {best_threshold:.2f}) | ROC-AUC = {roc_auc:.4f} | P@5 = {p_at_5:.4f}")
         
         # --- DEBUG STEP: CHECK PROBABILITIES ---
         if dim == 768: # Just check the largest dim for brevity

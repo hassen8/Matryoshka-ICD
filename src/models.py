@@ -12,25 +12,35 @@ class LabelAwareAttention(nn.Module):
         super().__init__()
         self.num_labels = config.num_labels
         self.hidden_size = config.hidden_size
+        
+        # We must restrict the attention to ONLY the base Matryoshka dimension.
+        # Otherwise, the attention weights (alpha) for the 64-dim subset
+        # would be computed using the full 768-dim space, entangling the subsets
+        # and breaking the Matryoshka gradient flow.
+        self.base_dim = config.nesting_dims[0] 
 
         # Projection matrix U from the paper (maps hidden states to attention latent space)
         # Equation: Z = tanh(V * H^T)
-        self.W1 = nn.Linear(config.hidden_size, config.hidden_size)
+        # Modified to only map from the base_dim to base_dim
+        self.W1 = nn.Linear(self.base_dim, self.base_dim)
 
         # Projection matrix to Label Space
         # Equation: A = softmax(W * Z)
-        self.W2 = nn.Linear(config.hidden_size, config.num_labels)
+        # Modified to map from base_dim to the number of labels
+        self.W2 = nn.Linear(self.base_dim, config.num_labels)
 
         self.dropout = nn.Dropout(config.dropout_prob)
 
     def forward(self, hidden_states, attention_mask=None):
         # hidden_states: [batch_size, seq_len, hidden_size]
 
-        # 1. Project to latent attention space
-        # Z shape: [batch, seq_len, hidden_size]
-        Z = torch.tanh(self.W1(hidden_states))
+        # 1. Project to latent attention space using ONLY the base dimension
+        # This decouples the attention mechanism from the higher Matryoshka dimensions.
+        # Z shape: [batch, seq_len, base_dim]
+        base_hidden_states = hidden_states[:, :, :self.base_dim]
+        Z = torch.tanh(self.W1(base_hidden_states))
 
-        # 2. Compute attention logits for each label
+        # 2. Compute attention logits for each label based on the decoupled latent space
         # attn_logits shape: [batch, seq_len, num_labels]
         attn_logits = self.W2(Z)
 
@@ -69,12 +79,19 @@ class MatryoshkaClassifier(nn.Module):
         self.nesting_dims = config.nesting_dims
         self.hidden_size = config.hidden_size
 
-        # Single projection layer.
-        # Note: In PLM-ICD, we predict presence/absence (binary).
-        # Since 'doc_representations' is already,
-        # we need to project 'Hidden' to scalar 1.
-        # This acts as w_i^T * d_i + b_i shared across all labels (common in LAA).
-        self.classifier = nn.Linear(self.hidden_size, 1)
+        # Label-specific projection layer and decoupled bias.
+        # Note: In PLM-ICD, we predict presence/absence (binary) for highly imbalanced labels.
+        # Since 'doc_representations' is [batch, num_labels, hidden_size],
+        # we need to project each label's hidden vector to a scalar 1 independently.
+        # We replace the single shared scalar bias with a unique bias PER LABEL.
+        # This prevents the network from learning a massive negative shared bias
+        # that squashes the probabilities of higher Matryoshka dimensions.
+        self.classifier_weight = nn.Parameter(torch.Tensor(config.num_labels, self.hidden_size))
+        self.classifier_bias = nn.Parameter(torch.Tensor(config.num_labels))
+        
+        # Initialize weights and biases appropriately
+        nn.init.xavier_uniform_(self.classifier_weight)
+        nn.init.zeros_(self.classifier_bias)
 
     def forward(self, doc_representations):
         # doc_representations: [batch, num_labels, hidden_size]
@@ -87,18 +104,20 @@ class MatryoshkaClassifier(nn.Module):
             sliced_rep = doc_representations[:, :, :dim] # [batch, num_labels, dim]
 
             # 2. Slice the Classifier Weights (Weight Tying)
-            # Efficient MRL: We reuse the first 'dim' weights of the full classifier
-            # Full weight: [1, hidden_size] -> Sliced: [1, dim]
-            sliced_weight = self.classifier.weight[:, :dim]
-            sliced_bias = self.classifier.bias
+            # Efficient MRL: We reuse the first 'dim' weights of the label-specific classifier
+            # Full weight: [num_labels, hidden_size] -> Sliced: [num_labels, dim]
+            sliced_weight = self.classifier_weight[:, :dim]
+            
+            # Use the decoupled label-specific bias
+            sliced_bias = self.classifier_bias
 
-            # 3. Linear Projection
-            # Functional linear call: input @ weight.T + bias
-            # [batch, num_labels, dim] @ [dim, 1] +  -> [batch, num_labels, 1]
-            logits = F.linear(sliced_rep, sliced_weight, sliced_bias)
+            # 3. Decoupled Projection (dot product over the 'dim' dimension)
+            # Input: [batch, num_labels, dim] * Weight: [num_labels, dim]
+            # Element-wise multiply, then sum over the last dimension (dim=-1)
+            # Result: [batch, num_labels]
+            logits = (sliced_rep * sliced_weight).sum(dim=-1) + sliced_bias
 
-            # Remove the last singleton dimension
-            logits_dict[dim] = logits.squeeze(-1) # [batch, num_labels]
+            logits_dict[dim] = logits # [batch, num_labels]
 
         return logits_dict
 
