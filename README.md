@@ -39,6 +39,9 @@ In the future, i plan to introduce a script which automatically processes the MI
 - `icd_hierarchy`: pipe separated string representing the hierarchical ICD codes, showing the higher-level classifications it belongs to. (e.g., `R05|R05.9`).
 - `query`: A text query, i.e., the sequence of keywords a doctor would search for in a potential search engine. (e.g., `pneumonia | pleural effusion.`).
 
+### Pair Generation for Retrieval
+
+For the retrieval model, the dataset pipeline integrates an external mapping file (`icd_descr_map.json`) to load detailed text descriptions corresponding to their respective ICD leaves. The multi-label rows are expanded into anchor-positive pairs, matching unstructured clinical text queries to structured ICD semantic descriptions (`query`, `description`). This allows effective sequence-pair formatting to train contrastive bi-encoders like SentenceTransformers.
 
 ### Training
 
@@ -114,4 +117,4 @@ python main.py --model_type all --epochs 20
 
 ## Performance
 
-The system evaluates **Micro-F1**, **ROC-AUC**, and **Precision@5** independently for each nesting dimension (e.g., 64d vs 768d). See `project_report.md` for theoretical background and details.
+The system evaluates **Micro-F1**, **ROC-AUC**, and **Precision@5** independently for each nesting dimension (e.g., 64d vs 768d). Integrated into the `src/utils.py` module are tools that automatically generate grouped bar charts and validation curves to track these metrics across training epochs for ablation analysis. See `project_report.md` for theoretical background and details.
