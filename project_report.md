@@ -52,16 +52,19 @@ The model is defined in `src/models.py` and consists of three main stages:
 
 2.  **Label-Aware Attention (`LabelAwareAttention`)**:
     - Projects hidden states $H$ to a latent space using $V$ and computes attention with matrix $W$ (mapping to `num_labels`).
+    - **Decoupled Attention**: Crucially, the attention mechanism is restricted to ONLY the base Matryoshka dimension (e.g., 64). This decouples the attention computation from higher dimensions, ensuring that the subset isn't entangled with the full 768-dim space and preserving the Matryoshka gradient flow.
     - Outputs a tensor of shape `[batch, num_labels, hidden_size]`.
     - Each vector $v_l$ represents the document specifically for detecting label $l$.
 
 3.  **Matryoshka Classifier (`MatryoshkaClassifier`)**:
-    - A single linear projection layer that maps `hidden_size` $\rightarrow$ 1 (logit for "present/absent").
-    - **Weight Tying**: Instead of separate heads for each dimension, it *slices* the weights of the single linear layer. 
+    - A label-specific projection layer with a unique, decoupled bias per label.
+    - **Decoupled Classification**: Instead of a shared scalar bias that can squash higher-dimension probabilities, it calculates a dot product over the slicing dimension independently and adds the label's own bias.
+    - **Weight Tying**: Instead of separate heads for each dimension, it *slices* the weights of the linear layer. 
+
     - For a nesting dimension $d$ (e.g., 64):
         - It takes the first $d$ features of the document representation.
         - It takes the first $d$ weights of the classifier.
-        - Computes the dot product.
+        -  Computes the detached dot product and adds the decoupled bias.
 
 ### 3.3. Loss Function (`StandardMRLLoss`)
 The loss function is a weighted sum of Binary Cross-Entropy (BCE) losses calculated at each nesting dimension.
@@ -79,6 +82,7 @@ This forces the model to pack the most critical information into the earliest di
 - **Evaluation**:
     - Metrics: Micro-F1, ROC-AUC, and Precision@5 (P@5).
     - **N.B**: Metrics are calculated *independently* for each nesting dimension during validation.
+    - **Threshold Tuning**: Since the dataset is highly imbalanced, probabilities can be pushed low. The evaluation includes a threshold tuning sweep to find the optimal global threshold specifically for Micro-F1, recognizing that 0.5 is often a suboptimal default.    
     - Evaluation tools in `src/utils.py` automatically generate grouped bar charts and validation curves to track these metrics across Matryoshka dimensions during training.
     - This allows verification that the 64-dim representation performs comparably to the 768-dim one (the "Matryoshka" effect).
 
