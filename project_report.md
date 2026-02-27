@@ -29,9 +29,9 @@ Standard representation learning models an object as a fixed-size vector $v \in 
     - Adds it to a dataframe containing the `query` and all other information in the `mimicxr_parsed_ds.jsonl` file per patient.
     - Tokenizes text using a BERT-based tokenizer.
     - Aggregates labels by `reportid` into a multi-hot binary vector.
-- **Data Loader**: Returns `input_ids`, `attention_mask`, and `labels`.
+- **Data Loader**: For standard models, it returns `input_ids`, `attention_mask`, and `labels`. For retrieval models, it extracts anchor-positive text pairs `(query, description)` by matching the target `leaf_icd` to its semantic description from `icd_descr_map.json`.
 - Dataset is split into training, validation, and test sets.
-- Training treats the problem as a multi-label classification problem.
+- Training treats the problem as a multi-label classification problem (or contrastive learning for the retrieval ablation).
 
 ### 3.1.1 Dataset Statistics
 Based on the analysis of the provided `mimicxr_parsed_ds.jsonl` file, the duplicates were collapsed to represent a multi-label classification problem, which inturn gives us these unique values:
@@ -78,7 +78,9 @@ This forces the model to pack the most critical information into the earliest di
 - **Scheduler**: Standard linear/cosine schedulers (implied, though simple optimization used in `trainer.py`).
 - **Evaluation**:
     - Metrics: Micro-F1, ROC-AUC, and Precision@5 (P@5).
-    - **Crucial**: Metrics are calculated *independently* for each nesting dimension during validation.
+    - **N.B**: Metrics are calculated *independently* for each nesting dimension during validation.
+    - Evaluation tools in `src/utils.py` automatically generate grouped bar charts and validation curves to track these metrics across Matryoshka dimensions during training.
+    - **Threshold Tuning**: Since the dataset is highly imbalanced, probabilities can be pushed low. The evaluation includes a threshold tuning sweep to find the optimal global threshold specifically for Micro-F1, recognizing that 0.5 is often a suboptimal default.
     - This allows verification that the 64-dim representation performs comparably to the 768-dim one (the "Matryoshka" effect).
 
 ## 5. Directory Structure
