@@ -27,6 +27,12 @@ def get_retrieval_model(pretrained_model_name='microsoft/BiomedNLP-PubMedBERT-ba
         dense_model = models.Dense(in_features=pooling_model.get_sentence_embedding_dimension(),
                                    out_features=pooling_model.get_sentence_embedding_dimension(),
                                    activation_function=nn.Identity()) # Linear probe
+        
+        # Initialize with Identity to preserve pre-trained embeddings
+        with torch.no_grad():
+            dense_model.linear.weight.copy_(torch.eye(dense_model.linear.in_features))
+            dense_model.linear.bias.fill_(0)
+
         modules.append(dense_model)
         
     model = SentenceTransformer(modules=modules)

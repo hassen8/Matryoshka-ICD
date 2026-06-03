@@ -122,23 +122,12 @@ def train_retrieval_model(model, train_loader, val_dataset, label_texts, optimiz
         model.train()
         total_loss = 0
 
-        # Note: train_loader returns batches of InputExample objects
-        # To use with standard PyTorch we need sentence_transformers.models features,
-        # but the easiest way is using sentence_transformers' built in fit if we can,
-        # or doing a manual loop. We'll do a manual loop so we keep wandb logging identical.
+        # train_loader now returns a list of dictionaries containing batched tokenized data natively: [query_features, positive_features]
+        # This prevents CPU tokenization bottleneck during training.
         
-        for batch in tqdm(train_loader, desc="Training"):
+        for features in tqdm(train_loader, desc="Training"):
             optimizer.zero_grad()
             
-            # batch is a list of InputExample
-            # sentence_transformers loss functions expect inputs as a list of dictionaries containing tokenized data
-            num_texts = len(batch[0].texts)
-            features = []
-            for idx in range(num_texts):
-                texts = [example.texts[idx] for example in batch]
-                features.append(model.tokenize(texts))
-                
-            # features is a list of dictionaries [query_features, positive_features]
             # device transfer
             for f in features:
                 for key in f:
@@ -146,8 +135,9 @@ def train_retrieval_model(model, train_loader, val_dataset, label_texts, optimiz
             
             # sentence_transformers MatryoshkaLoss
             # It expects features, labels (ignored for MNR)
-            # Dummy labels
-            labels = torch.zeros(len(batch)).to(config.device)
+            # Dummy labels, size matching batch_size
+            batch_size = features[0]['input_ids'].size(0)
+            labels = torch.zeros(batch_size, dtype=torch.float).to(config.device)
             loss_value = matryoshka_loss(features, labels)
             
             loss_value.backward()

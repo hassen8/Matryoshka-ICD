@@ -190,3 +190,45 @@ class StandardAttentionICD(nn.Module):
             logits_dict[dim] = logits # [batch, num_labels]
 
         return logits_dict
+# PLM-ICD (only using full-dimension classifier)
+class plm_icd(nn.Module):
+    def __init__(self, config, pretrained_model_name='microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract'):
+        super().__init__()
+        self.config = config
+        self.bert = AutoModel.from_pretrained(pretrained_model_name)
+
+        if config.freeze_backbone:
+            print(f"Freezing backbone: {pretrained_model_name}")
+            for param in self.bert.parameters():
+                param.requires_grad = False
+
+        # Attach LAA and Classifier Modules
+        self.attention = LabelAwareAttention(config)
+        self.classifier = nn.Linear(config.hidden_size, 1)
+
+    def forward(self, input_ids, attention_mask):
+        #1 PLM Encoding
+        outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask)
+        last_hidden_state = outputs.last_hidden_state # [batch, seq_len, hidden]
+
+        #2 Label-Aware Attention
+        doc_reps = self.attention(last_hidden_state, attention_mask)
+
+        #3 Regular classification
+        logits_dict = {}
+
+        if self.training:
+            # During training, we ONLY return the full dimension to avoid Matryoshka training
+            logits = self.classifier(doc_reps).squeeze(-1) # [batch, num_labels]
+            logits_dict[self.config.hidden_size] = logits
+        else:
+            # During evaluation, return all dimensions by slicing the representations and weights
+            # to test the model's performance on the same dimensions and elucidate Matryoshka effect
+            for dim in self.config.nesting_dims:
+                sliced_rep = doc_reps[:, :, :dim]
+                sliced_weight = self.classifier.weight[:, :dim]
+                sliced_bias = self.classifier.bias
+                logits = F.linear(sliced_rep, sliced_weight, sliced_bias).squeeze(-1)
+                logits_dict[dim] = logits
+
+        return logits_dict
