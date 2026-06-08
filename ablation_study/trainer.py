@@ -23,7 +23,7 @@ def evaluate_retrieval(model, val_dataset, label_texts, config, label2id):
     targets_list = []
     num_labels = len(label2id)
     
-    for labels in val_dataset['leaf_doc']:
+    for labels in val_dataset['icd_codes']:
         target_vec = np.zeros(num_labels)
         for lbl in labels:
             if lbl in label2id:

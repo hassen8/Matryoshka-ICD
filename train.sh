@@ -7,7 +7,6 @@
 #SBATCH --gpus=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16GB
-#SBATCH --time=03:00:00
 
 # activate venv
 source /home/hsali/projects/icd/.venv/bin/activate
@@ -16,4 +15,4 @@ source /home/hsali/projects/icd/.venv/bin/activate
 source .env
 
 # run Python script
-uv run main.py --model_type all --epochs 20
+uv run main.py --model_type retrieval --epochs 20

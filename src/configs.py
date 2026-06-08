@@ -6,10 +6,11 @@ def parse_args():
     
     # Data paths
     parser.add_argument("--data_path", type=str, required=False, help="Path to the CSV dataset")
-    parser.add_argument("--text_column", type=str, default="report_text", help="Column to be used as text to tokenize")
-    parser.add_argument("--label_column", type=str, default="leaf_doc", help="Column to be used as labels")
+    parser.add_argument("--dataset_dir", type=str, default="/home/hsali/projects/icd/MIMIC-GEN-RAG", help="Directory containing MIMIC-GEN-RAG JSONL files")
+    parser.add_argument("--text_column", type=str, default="summary_text", help="Column to be used as text to tokenize")
+    parser.add_argument("--label_column", type=str, default="icd_codes", help="Column to be used as labels")
     parser.add_argument("--model_name", type=str, default="thomas-sounack/BioClinical-ModernBERT-base")
-    parser.add_argument("--model_type", type=str, default="laa", choices=['laa', 'standard_attn', 'retrieval', 'all'])
+    parser.add_argument("--model_type", type=str, default="laa", choices=['laa', 'standard_attn', 'retrieval', 'all', 'plm_icd'])
     parser.add_argument("--use_projection", type=bool, default=True, help="Whether to include a projection layer for retrieval model")
     
     # Training Hyperparameters

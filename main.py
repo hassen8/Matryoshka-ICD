@@ -7,13 +7,12 @@ import logging
 
 from src.configs import parse_args, ModelConfig
 from src.data import get_data_loaders
-from src.models import HMPLMICD, StandardAttentionICD
+from src.models import HMPLMICD, StandardAttentionICD, plm_icd
 from src.loss import StandardMRLLoss, HierarchicalMRLLoss
 from src.trainer import train_model, evaluate_model
 from src.utils import plot_and_save_metrics, save_file, plot_test_metrics
 from ablation_study.models import get_retrieval_model
 from ablation_study.trainer import train_retrieval_model, evaluate_retrieval
-from src.dataset.preprocess import preprocess_data
 
 # Setup Logging
 # Create logs directory if it doesn't exist
@@ -45,18 +44,20 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     
     # Determine models to run
-    models_to_run = ['laa', 'standard_attn', 'retrieval'] if args.model_type == 'all' else   [args.model_type]
+    models_to_run = ['laa', 'standard_attn', 'retrieval', 'plm_icd'] if args.model_type == 'all' else [args.model_type]
     
     for current_model_type in models_to_run:
         logger.info(f"\n{'='*50}\nStarting execution for {current_model_type}\n{'='*50}")
 
         # 1. Fetch data loaders specific to this model type and set up config
-        train_loader, val_loader, test_loader, label_data, num_labels = get_data_loaders(
+        train_loader, val_loader, test_loader, label_data, num_labels, retrieval_descriptions = get_data_loaders(
             tokenizer=tokenizer,
             batch_size=args.batch_size,
             max_len=args.max_len,
             text_col=args.text_column,
             label_col=args.label_column,
+            output_dir=args.output_csv_dir,
+            dataset_dir=args.dataset_dir,
             model_type=current_model_type
         )
 
@@ -73,9 +74,11 @@ def main():
             model = StandardAttentionICD(config, pretrained_model_name=args.model_name)
         elif config.model_type == 'retrieval':
             model = get_retrieval_model(pretrained_model_name=args.model_name, config=config)
+        elif config.model_type == 'plm_icd':
+            model = plm_icd(config, pretrained_model_name=args.model_name)
             
         # 3. Dispatch to appropriate trainer
-        if config.model_type in ['laa', 'standard_attn']:
+        if config.model_type in ['laa', 'standard_attn', 'plm_icd']:
             model.to(device)
 
             # create the baseline performance
@@ -101,10 +104,7 @@ def main():
             
             val_dataset = val_loader 
             test_dataset = test_loader 
-            label_texts = label_data 
-            
-            # Re-fetch the actual label2id dict for metric calculation
-            _, _, _, actual_label2id, _ = preprocess_data()
+            label_texts = retrieval_descriptions
             
             # 6. Run Training
             logger.info("Starting Training for retrieval Matryoshka...")
@@ -115,7 +115,7 @@ def main():
                 label_texts=label_texts,
                 optimizer=optimizer, 
                 config=config, 
-                label2id=actual_label2id
+                label2id=label_data
             )
             plot_and_save_metrics(history, baseline, config, save_folder=f'logs/{current_model_type}')
             
