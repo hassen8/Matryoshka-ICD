@@ -159,6 +159,7 @@ def preprocess_data_v2(
             icd_map[key].append({
                 'icd_code': row['icd_code'],
                 'seq_num': row['seq_num'],
+                'icd_sequence': row['icd_sequence'],
             })
     print(f"  Total ICD rows: {total_icd_rows}, CM rows: {cm_rows}")
     print(f"  Unique admissions with CM codes: {len(icd_map)}")
@@ -177,6 +178,7 @@ def preprocess_data_v2(
             'summary_text': entity_map[key],
             'icd_codes': [c['icd_code'] for c in codes],
             'seq_nums': [c['seq_num'] for c in codes],
+            'icd_sequences': [c['icd_sequence'] for c in codes],
         })
 
     df = pd.DataFrame(records)

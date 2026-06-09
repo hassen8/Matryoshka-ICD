@@ -3,8 +3,10 @@ import os
 import numpy as np
 from tqdm import tqdm
 from sklearn.metrics import f1_score, roc_auc_score
+from src.eval import compute_all_metrics
 
-def evaluate_model(model, val_loader, config):
+# def evaluate_model(model, val_loader, config):
+def evaluate_model(model, val_loader, config, label_hierarchies=None, k_values=None, val_df=None, label2id=None):
     model.eval()
     logger = config.logger
     model_type = config.model_type
@@ -87,15 +89,82 @@ def evaluate_model(model, val_loader, config):
         
         # --- DEBUG STEP: CHECK PROBABILITIES ---
         if dim == 768: # Just check the largest dim for brevity
-            # print(f"DEBUG: Max Prob: {np.max(all_preds):.4f}")
-            # print(f"DEBUG: Mean Prob: {np.mean(all_preds):.4f}")
             logger.info(f"DEBUG: Max Prob: {np.max(all_preds):.4f}")
             logger.info(f"DEBUG: Mean Prob: {np.mean(all_preds):.4f}")
+
+    # --- PER-SEQ_NUM METRICS ---
+    if val_df is not None and k_values is not None:
+        logger.info("\n--- Per-seq_num Metrics ---")
+        num_labels = config.num_labels
+        all_seq_nums = set()
+        for seqs in val_df['seq_nums']:
+            all_seq_nums.update(seqs)
+        max_seq_to_track = min(max(all_seq_nums), 15)  # Track up to seq_num 15
+
+        for seq in range(1, max_seq_to_track + 1):
+            # Find which rows (samples) have this seq_num and which label indices belong to it
+            sample_indices = []
+            label_indices_for_seq = {}
+            for sample_idx, (codes, seqs) in enumerate(zip(val_df['icd_codes'], val_df['seq_nums'])):
+                for code, s in zip(codes, seqs):
+                    if s == seq and code in label2id:
+                        if sample_idx not in label_indices_for_seq:
+                            label_indices_for_seq[sample_idx] = []
+                        label_indices_for_seq[sample_idx].append(label2id[code])
+
+            if len(label_indices_for_seq) == 0:
+                continue
+
+            # Create binary target mask: [N_subset, num_labels] where only seq_num=seq labels are 1
+            subset_idxs = sorted(label_indices_for_seq.keys())
+            seq_targets = np.zeros((len(subset_idxs), num_labels))
+            for i, sample_idx in enumerate(subset_idxs):
+                for label_idx in label_indices_for_seq[sample_idx]:
+                    seq_targets[i, label_idx] = 1.0
+
+            for dim in config.nesting_dims:
+                all_preds = np.vstack(results_storage[dim]['preds'])
+                seq_preds = all_preds[subset_idxs]
+
+                # Classification metrics (F1, AUC) on seq_num subset
+                # Flatten to compute micro metrics on just these labels
+                flat_preds = seq_preds.flatten()
+                flat_targets = seq_targets.flatten()
+
+                # Micro-F1 with threshold tuning
+                best_f1 = 0.0
+                for t in np.arange(0.01, 0.51, 0.01):
+                    preds_binary = (flat_preds > t).astype(int)
+                    f1_t = f1_score(flat_targets, preds_binary, average='micro', zero_division=0)
+                    if f1_t > best_f1:
+                        best_f1 = f1_t
+                metrics[f"val/dim_{dim}_seq_{seq}_f1"] = best_f1
+
+                try:
+                    seq_auc = roc_auc_score(flat_targets, flat_preds, average='micro')
+                except ValueError:
+                    seq_auc = 0.0
+                metrics[f"val/dim_{dim}_seq_{seq}_auc"] = seq_auc
+
+                logger.info(f"  seq_num={seq} dim={dim}: F1={best_f1:.4f}, AUC={seq_auc:.4f}")
+    if label_hierarchies is not None and k_values is not None:
+        logger.info("\n--- IR & Cluster Metrics (Matryoshka) ---")
+        for dim in config.nesting_dims:
+            all_preds = np.vstack(results_storage[dim]['preds'])
+            all_targets = np.vstack(results_storage[dim]['targets'])
+            ir_metrics = compute_all_metrics(all_preds, all_targets, label_hierarchies, k_values)
+            for name, val in ir_metrics.items():
+                key = f"val/dim_{dim}_{name}"
+                metrics[key] = val
+                # Log only a few key metrics to avoid noise in logs
+                if 'recall' in name or 'ndcg' in name or 'cluster_match' in name:
+                    logger.info(f"  Dim {dim}: {name} = {val:.4f}")
 
     return metrics
 
 
-def train_model(model, train_loader, val_loader, criterion, optimizer, config):
+# def train_model(model, train_loader, val_loader, criterion, optimizer, config):
+def train_model(model, train_loader, val_loader, criterion, optimizer, config, label_hierarchies=None, k_values=None, val_df=None, label2id=None):
     logger = config.logger
     wandb = config.wandb
     model.to(config.device)
@@ -112,7 +181,8 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, config):
         name=f"{model_type}_run_{wandb.util.generate_id()}"
     )
     # record baseline performance
-    baseline_metrics = evaluate_model(model, val_loader, config)
+    # baseline_metrics = evaluate_model(model, val_loader, config)
+    baseline_metrics = evaluate_model(model, val_loader, config, label_hierarchies, k_values, val_df, label2id)
     baseline_metrics['epoch'] = 0
     wandb.log(baseline_metrics)
 
@@ -159,7 +229,8 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, config):
 
 
         # --- EVALUATION PHASE (Matryoshka Aware) ---
-        val_metrics = evaluate_model(model, val_loader, config)
+        # val_metrics = evaluate_model(model, val_loader, config)
+        val_metrics = evaluate_model(model, val_loader, config, label_hierarchies, k_values, val_df, label2id)
         val_metrics['epoch'] = epoch + 1
         val_metrics['train_loss'] = avg_train_loss
         history.append(val_metrics)

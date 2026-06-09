@@ -160,9 +160,14 @@ def get_data_loaders(tokenizer=None, batch_size=32, max_len=512, text_col='summa
         
         train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
         
-        ordered_descriptions = [icd_descriptions_map[list(label2id.keys())[list(label2id.values()).index(i)]] for i in range(num_labels)]
+        ordered_descriptions = [icd_descriptions_map.get(list(label2id.keys())[list(label2id.values()).index(i)], f"ICD {i}") for i in range(num_labels)]
         
-        return train_loader, validate_ds, test_ds, label2id, num_labels, ordered_descriptions
+        return train_loader, validate_ds, test_ds, label2id, num_labels, {
+            'retrieval_descriptions': ordered_descriptions,
+            'train_df': train_df,
+            'validate_df': validate_df,
+            'test_df': test_df,
+        }
 
     else:
         # Standard PLM Classification
@@ -195,8 +200,15 @@ def get_data_loaders(tokenizer=None, batch_size=32, max_len=512, text_col='summa
         
         
         train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
-        validate_loader = DataLoader(validate_ds, batch_size=batch_size, shuffle=True)
-        test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=True)
+        # validate_loader = DataLoader(validate_ds, batch_size=batch_size, shuffle=True)
+        # test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=True)
+        validate_loader = DataLoader(validate_ds, batch_size=batch_size, shuffle=False)
+        test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
         
-        return train_loader, validate_loader, test_loader, label2id, num_labels, None
+        return train_loader, validate_loader, test_loader, label2id, num_labels, {
+            'retrieval_descriptions': None,
+            'train_df': train_df,
+            'validate_df': validate_df,
+            'test_df': test_df,
+        }
     

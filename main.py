@@ -10,6 +10,7 @@ from src.data import get_data_loaders
 from src.models import HMPLMICD, StandardAttentionICD, plm_icd
 from src.loss import StandardMRLLoss, HierarchicalMRLLoss
 from src.trainer import train_model, evaluate_model
+from src.eval import build_label_hierarchy_map
 from src.utils import plot_and_save_metrics, save_file, plot_test_metrics
 from ablation_study.models import get_retrieval_model
 from ablation_study.trainer import train_retrieval_model, evaluate_retrieval
@@ -50,7 +51,7 @@ def main():
         logger.info(f"\n{'='*50}\nStarting execution for {current_model_type}\n{'='*50}")
 
         # 1. Fetch data loaders specific to this model type and set up config
-        train_loader, val_loader, test_loader, label_data, num_labels, retrieval_descriptions = get_data_loaders(
+        train_loader, val_loader, test_loader, label_data, num_labels, meta = get_data_loaders(
             tokenizer=tokenizer,
             batch_size=args.batch_size,
             max_len=args.max_len,
@@ -60,6 +61,10 @@ def main():
             dataset_dir=args.dataset_dir,
             model_type=current_model_type
         )
+        retrieval_descriptions = meta['retrieval_descriptions']
+        train_df = meta['train_df']
+        val_df = meta['validate_df']
+        test_df = meta['test_df']
 
         config = ModelConfig(args, num_labels)
         config.device = device
@@ -81,9 +86,14 @@ def main():
         if config.model_type in ['laa', 'standard_attn', 'plm_icd']:
             model.to(device)
 
+            # Build label hierarchy map for cluster matching metrics (from DataFrames in memory)
+            label_hierarchies = build_label_hierarchy_map(train_df, val_df, test_df, label_data)
+            k_values = config.k_values
+
             # create the baseline performance
             test_metrics = {}
-            test_metrics['baseline_performance'] = evaluate_model(model, test_loader, config)
+            # test_metrics['baseline_performance'] = evaluate_model(model, test_loader, config)
+            test_metrics['baseline_performance'] = evaluate_model(model, test_loader, config, label_hierarchies, k_values, test_df, label_data)
             
             # 5. Optimizer & Loss
             importance_weights = {64: 1.0, 128: 1.0, 256: 1.0, 768: 1.0} # Can also be moved to args
@@ -92,11 +102,13 @@ def main():
 
             # 6. Run Training
             logger.info(f"Starting Training for {config.model_type}...")
-            baseline, history = train_model(model, train_loader, val_loader, criterion, optimizer, config)
+            # baseline, history = train_model(model, train_loader, val_loader, criterion, optimizer, config)
+            baseline, history = train_model(model, train_loader, val_loader, criterion, optimizer, config, label_hierarchies, k_values, val_df, label_data)
             plot_and_save_metrics(history, baseline, config, save_folder=f'logs/{current_model_type}')
             
             #7. Run the testset
-            test_metrics['trained_performance'] = evaluate_model(model, test_loader, config)
+            # test_metrics['trained_performance'] = evaluate_model(model, test_loader, config)
+            test_metrics['trained_performance'] = evaluate_model(model, test_loader, config, label_hierarchies, k_values, test_df, label_data)
             plot_test_metrics(test_metrics, config, save_folder=f'logs/{current_model_type}')
         else:
             # 5. Optimizer for Retrieval
@@ -122,7 +134,7 @@ def main():
             # 7. Test
             test_metrics = {}
             test_metrics['baseline_performance'] = baseline
-            test_metrics['trained_performance'] = evaluate_retrieval(model, test_dataset, label_texts, config, actual_label2id)
+            test_metrics['trained_performance'] = evaluate_retrieval(model, test_dataset, label_texts, config, label_data)
             plot_test_metrics(test_metrics, config, save_folder=f'logs/{current_model_type}')
 
     

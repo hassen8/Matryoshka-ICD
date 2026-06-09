@@ -25,6 +25,7 @@ def parse_args():
     
     # MRL Configs
     parser.add_argument("--nesting_dims", type=int, nargs="+", default=[64, 128, 256, 768])
+    parser.add_argument("--k_values", type=int, nargs="+", default=[1, 3, 5, 10, 20, 50, 100], help="K cutoffs for IR metrics (recall, precision, ndcg, mrr, map)")
     
     # Misc
     parser.add_argument("--checkpoint_dir", type=str, default="./checkpoints")
@@ -41,6 +42,7 @@ class ModelConfig:
         self.text_col = args.text_column
         self.hidden_size = args.hidden_size
         self.nesting_dims = sorted(args.nesting_dims)
+        self.k_values = sorted(args.k_values) if hasattr(args, 'k_values') else [1, 3, 5, 10, 20, 50, 100]
         self.hierarchical_mode = args.hierarchical_mode
         self.dropout_prob = args.dropout_prob
         self.batch_size = args.batch_size
