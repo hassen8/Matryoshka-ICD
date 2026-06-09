@@ -10,7 +10,7 @@ def parse_args():
     parser.add_argument("--text_column", type=str, default="summary_text", help="Column to be used as text to tokenize")
     parser.add_argument("--label_column", type=str, default="icd_codes", help="Column to be used as labels")
     parser.add_argument("--model_name", type=str, default="thomas-sounack/BioClinical-ModernBERT-base")
-    parser.add_argument("--model_type", type=str, default="laa", choices=['laa', 'standard_attn', 'retrieval', 'all', 'plm_icd'])
+    parser.add_argument("--text_format", type=str, default="raw", choices=['raw', 'stripped', 'structured', 'both'], help="Text preprocessing: raw (NER-tagged), stripped (no tags), structured (grouped by entity type), both (run stripped + structured)")
     parser.add_argument("--use_projection", type=bool, default=True, help="Whether to include a projection layer for retrieval model")
     
     # Training Hyperparameters

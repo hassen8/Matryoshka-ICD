@@ -1,6 +1,27 @@
 import pandas as pd
 from pathlib import Path
 from src.utils import save_file
+import re
+
+def strip_entity_tags(text):
+    """
+    Remove NER entity tags from summary_text, keeping only the extracted terms.
+    <medication> lasix  →  lasix
+    <disorder>  ascites →  ascites
+    <health_context> Past history → Past history
+    Also collapses excessive whitespace.
+    """
+    # Remove opening/closing tags while preserving the content
+    text = re.sub(r'<\w+>\s*', '', text)  # strip <medication>, <disorder>, etc.
+    # Collapse multiple newlines and strip leading/trailing whitespace
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = text.strip()
+    return text
+
+
+def structure_entity_tags(text):
+    """TODO: Task 2.2 — group entities by type into structured sections."""
+    return text  # passthrough for now
 
 # remove unnecessary data from report_text, keep only the findings and impression sections and remove the section titles and empty lines between them
 def clean_report_text(text):
@@ -124,6 +145,7 @@ def preprocess_data_v2(
     test_ratio=0.1,
     random_seed=42,
     min_code_frequency=0,
+    text_format='raw',
 ):
     import json
     import random
@@ -183,6 +205,15 @@ def preprocess_data_v2(
 
     df = pd.DataFrame(records)
     print(f"  Total merged records: {len(df)}")
+
+    # 4b. Apply text formatting
+    if text_format == 'stripped':
+        print(f"  Stripping NER tags from summary_text...")
+        df['summary_text'] = df['summary_text'].apply(strip_entity_tags)
+    elif text_format == 'structured':
+        print(f"  Structuring summary_text by entity type...")
+        df['summary_text'] = df['summary_text'].apply(structure_entity_tags)
+    # 'raw' = keep as-is
 
     # 5. Filter low-frequency codes
     if min_code_frequency > 0:

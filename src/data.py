@@ -141,7 +141,7 @@ class RetrievalDataset(Dataset):
         return [q_feat, d_feat]
 
 
-def get_data_loaders(tokenizer=None, batch_size=32, max_len=512, text_col='summary_text', label_col='icd_codes', csv_path='', output_dir='/home/hsali/projects/icd/data', dataset_dir='/home/hsali/projects/icd/MIMIC-GEN-RAG', model_type='laa'):
+def get_data_loaders(tokenizer=None, batch_size=32, max_len=512, text_col='summary_text', label_col='icd_codes', csv_path='', output_dir='/home/hsali/projects/icd/data', dataset_dir='/home/hsali/projects/icd/MIMIC-GEN-RAG', model_type='laa', text_format='raw'):
   
     icd_path = f'{dataset_dir}/final_mimiciv_icd_with_radiology_refs.jsonl'
     entity_path = f'{dataset_dir}/entity_summaries_full.jsonl'
@@ -149,6 +149,7 @@ def get_data_loaders(tokenizer=None, batch_size=32, max_len=512, text_col='summa
         icd_path=icd_path,
         entity_path=entity_path,
         output_dir=output_dir,
+        text_format=text_format,
     )
     
     if model_type == 'retrieval':

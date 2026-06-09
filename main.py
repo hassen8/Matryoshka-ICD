@@ -59,7 +59,8 @@ def main():
             label_col=args.label_column,
             output_dir=args.output_csv_dir,
             dataset_dir=args.dataset_dir,
-            model_type=current_model_type
+            model_type=current_model_type,
+            text_format=args.text_format
         )
         retrieval_descriptions = meta['retrieval_descriptions']
         train_df = meta['train_df']
